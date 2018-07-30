@@ -595,7 +595,6 @@ fi
 
 holdWALinuxAgent
 installDeps
-ensureRpc
 
 if [[ "$CONTAINER_RUNTIME" == "docker" ]]; then
 	installDocker
@@ -613,7 +612,6 @@ fi
 # containerd needs to be installed before extractHyperkube
 # so runc is present.
 extractHyperkube
-fi
 
 if [[ "$CONTAINER_RUNTIME" == "clear-containers" ]]; then
 	# Ensure we can nest virtualization

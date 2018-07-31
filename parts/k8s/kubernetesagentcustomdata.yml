@@ -8,7 +8,6 @@ write_files:
   content: !!binary |
     {{WrapAsVariable "provisionSource"}}
 
-write_files:
 - path: "/opt/azure/containers/kubernetes_installs.sh"
   permissions: "0744"
   encoding: gzip
@@ -16,7 +15,6 @@ write_files:
   content: !!binary |
     {{WrapAsVariable "provisionInstalls"}}
 
-write_files:
 - path: "/opt/azure/containers/kubernetes_configs.sh"
   permissions: "0744"
   encoding: gzip

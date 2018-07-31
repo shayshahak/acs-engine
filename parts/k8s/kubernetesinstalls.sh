@@ -1,8 +1,8 @@
 #!/bin/bash
 
 function installEtcd() {
-    retrycmd_get_tarball 60 10 /tmp/etcd-${ETCD_VERSION}-linux-amd64.tar.gz ${ETCD_DOWNLOAD_URL}/etcd-${ETCD_VER}-linux-amd64.tar.gz || exit $ERR_ETCD_DOWNLOAD_TIMEOUT
-    tar xzvf /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz -C /usr/bin/ --strip-components=1
+    retrycmd_get_tarball 60 10 /tmp/etcd-${ETCD_VERSION}-linux-amd64.tar.gz ${ETCD_DOWNLOAD_URL}/etcd-${ETCD_VERSION}-linux-amd64.tar.gz || exit $ERR_ETCD_DOWNLOAD_TIMEOUT
+    tar xzvf /tmp/etcd-${ETCD_VERSION}-linux-amd64.tar.gz -C /usr/bin/ --strip-components=1
 }
 
 function installDeps() {

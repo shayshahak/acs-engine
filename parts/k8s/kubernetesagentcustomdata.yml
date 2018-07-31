@@ -8,6 +8,22 @@ write_files:
   content: !!binary |
     {{WrapAsVariable "provisionSource"}}
 
+write_files:
+- path: "/opt/azure/containers/kubernetes_installs.sh"
+  permissions: "0744"
+  encoding: gzip
+  owner: "root"
+  content: !!binary |
+    {{WrapAsVariable "provisionInstalls"}}
+
+write_files:
+- path: "/opt/azure/containers/kubernetes_configs.sh"
+  permissions: "0744"
+  encoding: gzip
+  owner: "root"
+  content: !!binary |
+    {{WrapAsVariable "provisionConfigs"}}
+
 {{if .KubernetesConfig.RequiresDocker}}
     {{if not .IsCoreOS}}
 - path: "/etc/systemd/system/docker.service.d/clear_mount_propagation_flags.conf"

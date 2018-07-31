@@ -128,17 +128,12 @@ function installAzureCNI() {
 function installContainerd() {
 	CRI_CONTAINERD_VERSION="1.1.0"
 	CONTAINERD_DOWNLOAD_URL="https://storage.googleapis.com/cri-containerd-release/cri-containerd-${CRI_CONTAINERD_VERSION}.linux-amd64.tar.gz"
-
     CONTAINERD_TGZ_TMP=/tmp/containerd.tar.gz
     retrycmd_get_tarball 60 5 "$CONTAINERD_TGZ_TMP" "$CONTAINERD_DOWNLOAD_URL"
 	tar -xzf "$CONTAINERD_TGZ_TMP" -C /
 	rm -f "$CONTAINERD_TGZ_TMP"
 	sed -i '/\[Service\]/a ExecStartPost=\/sbin\/iptables -P FORWARD ACCEPT' /etc/systemd/system/containerd.service
-
 	echo "Successfully installed cri-containerd..."
-	if [[ "$CONTAINER_RUNTIME" == "clear-containers" ]] || [[ "$CONTAINER_RUNTIME" == "kata-containers" ]] || [[ "$CONTAINER_RUNTIME" == "containerd" ]]; then
-		setupContainerd
-	fi
 }
 
 function extractHyperkube() {

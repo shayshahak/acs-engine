@@ -194,7 +194,8 @@ function setupContainerd() {
 
 function ensureContainerd() {
 	if [[ "$CONTAINER_RUNTIME" == "clear-containers" ]] || [[ "$CONTAINER_RUNTIME" == "kata-containers" ]] || [[ "$CONTAINER_RUNTIME" == "containerd" ]]; then
-		# Enable and start cri-containerd service
+		setupContainerd
+        # Enable and start cri-containerd service
 		# Make sure this is done after networking plugins are installed
 		echo "Enabling and starting cri-containerd service..."
 		systemctlEnableAndStart containerd

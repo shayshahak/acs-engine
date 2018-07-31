@@ -13,18 +13,20 @@ function installDeps() {
     apt_get_install 20 30 300 apt-transport-https ca-certificates iptables iproute2 ebtables socat util-linux mount ethtool init-system-helpers nfs-common ceph-common conntrack glusterfs-client ipset jq cgroup-lite git pigz xz-utils blobfuse fuse cifs-utils || exit $ERR_APT_INSTALL_TIMEOUT
 }
 
-function installFlexVolDrivers() {
-    PLUGIN_DIR=/etc/kubernetes/volumeplugins
-    # install blobfuse flexvolume driver
-    BLOBFUSE_DIR=$PLUGIN_DIR/azure~blobfuse
-    mkdir -p $BLOBFUSE_DIR
-    retrycmd_if_failure_no_stats 20 1 30 curl -fsSL https://acs-mirror.azureedge.net/flexvol/blobfuse-v0.1 > $BLOBFUSE_DIR/blobfuse || exit $ERR_FLEXVOLUME_DOWNLOAD_TIMEOUT
-    chmod a+x $BLOBFUSE_DIR/blobfuse
-    # install smb flexvolume driver
-    SMB_DIR=$PLUGIN_DIR/microsoft.com~smb
-    mkdir -p $SMB_DIR
-    retrycmd_if_failure_no_stats 20 1 30 curl -fsSL https://acs-mirror.azureedge.net/flexvol/smb-v0.1 > $SMB_DIR/smb || exit $ERR_FLEXVOLUME_DOWNLOAD_TIMEOUT
-    chmod a+x $SMB_DIR/smb
+function installContainerRuntime() {
+    if [[ "$CONTAINER_RUNTIME" == "docker" ]]; then
+        installDocker
+    elif [[ "$CONTAINER_RUNTIME" == "clear-containers" ]]; then
+	    # Ensure we can nest virtualization
+        if grep -q vmx /proc/cpuinfo; then
+            installClearContainersRuntime
+        fi
+    elif [[ "$CONTAINER_RUNTIME" == "kata-containers" ]]; then
+        # Ensure we can nest virtualization
+        if grep -q vmx /proc/cpuinfo; then
+            installKataContainersRuntime
+        fi
+    fi
 }
 
 function installDocker() {
@@ -37,45 +39,6 @@ function installDocker() {
     echo "ExecStartPost=/sbin/iptables -P FORWARD ACCEPT" >> /etc/systemd/system/docker.service.d/exec_start.conf
     usermod -aG docker ${ADMINUSER}
     touch /var/log/azure/docker-install.complete
-}
-
-function installNetworkPlugin() {
-    if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
-        installAzureCNI
-    elif [[ "${NETWORK_PLUGIN}" = "kubenet" ]]; then
-		installCNI
-	elif [[ "${NETWORK_PLUGIN}" = "flannel" ]]; then
-        installCNI
-    fi
-}
-
-function installCNI() {
-    mkdir -p $CNI_BIN_DIR
-    CONTAINERNETWORKING_CNI_TGZ_TMP=/tmp/containernetworking_cni.tgz
-    retrycmd_get_tarball 60 5 $CONTAINERNETWORKING_CNI_TGZ_TMP ${CNI_PLUGINS_URL} || exit $ERR_CNI_DOWNLOAD_TIMEOUT
-    tar -xzf $CONTAINERNETWORKING_CNI_TGZ_TMP -C $CNI_BIN_DIR
-    chown -R root:root $CNI_BIN_DIR
-    chmod -R 755 $CNI_BIN_DIR
-    # Turn on br_netfilter (needed for the iptables rules to work on bridges)
-    # and permanently enable it
-    retrycmd_if_failure 30 6 10 modprobe br_netfilter || exit $ERR_MODPROBE_FAIL
-    # /etc/modules-load.d is the location used by systemd to load modules
-    echo -n "br_netfilter" > /etc/modules-load.d/br_netfilter.conf
-}
-
-function installAzureCNI() {
-    CNI_CONFIG_DIR=/etc/cni/net.d
-    mkdir -p $CNI_CONFIG_DIR
-    chown -R root:root $CNI_CONFIG_DIR
-    chmod 755 $CNI_CONFIG_DIR
-    mkdir -p $CNI_BIN_DIR
-    AZURE_CNI_TGZ_TMP=/tmp/azure_cni.tgz
-    retrycmd_get_tarball 60 5 $AZURE_CNI_TGZ_TMP ${VNET_CNI_PLUGINS_URL} || exit $ERR_CNI_DOWNLOAD_TIMEOUT
-    tar -xzf $AZURE_CNI_TGZ_TMP -C $CNI_BIN_DIR
-    installCNI
-    mv $CNI_BIN_DIR/10-azure.conflist $CNI_CONFIG_DIR/
-    chmod 600 $CNI_CONFIG_DIR/10-azure.conflist
-    /sbin/ebtables -t nat --list
 }
 
 function installKataContainersRuntime() {
@@ -123,6 +86,45 @@ function installClearContainersRuntime() {
     cat $CC_SOCKET_IN_TMP sed 's#@localstatedir@#/var#' > /etc/systemd/system/cc-proxy.socket
 }
 
+function installNetworkPlugin() {
+    if [[ "${NETWORK_PLUGIN}" = "azure" ]]; then
+        installAzureCNI
+    elif [[ "${NETWORK_PLUGIN}" = "kubenet" ]]; then
+		installCNI
+	elif [[ "${NETWORK_PLUGIN}" = "flannel" ]]; then
+        installCNI
+    fi
+}
+
+function installCNI() {
+    mkdir -p $CNI_BIN_DIR
+    CONTAINERNETWORKING_CNI_TGZ_TMP=/tmp/containernetworking_cni.tgz
+    retrycmd_get_tarball 60 5 $CONTAINERNETWORKING_CNI_TGZ_TMP ${CNI_PLUGINS_URL} || exit $ERR_CNI_DOWNLOAD_TIMEOUT
+    tar -xzf $CONTAINERNETWORKING_CNI_TGZ_TMP -C $CNI_BIN_DIR
+    chown -R root:root $CNI_BIN_DIR
+    chmod -R 755 $CNI_BIN_DIR
+    # Turn on br_netfilter (needed for the iptables rules to work on bridges)
+    # and permanently enable it
+    retrycmd_if_failure 30 6 10 modprobe br_netfilter || exit $ERR_MODPROBE_FAIL
+    # /etc/modules-load.d is the location used by systemd to load modules
+    echo -n "br_netfilter" > /etc/modules-load.d/br_netfilter.conf
+}
+
+function installAzureCNI() {
+    CNI_CONFIG_DIR=/etc/cni/net.d
+    mkdir -p $CNI_CONFIG_DIR
+    chown -R root:root $CNI_CONFIG_DIR
+    chmod 755 $CNI_CONFIG_DIR
+    mkdir -p $CNI_BIN_DIR
+    AZURE_CNI_TGZ_TMP=/tmp/azure_cni.tgz
+    retrycmd_get_tarball 60 5 $AZURE_CNI_TGZ_TMP ${VNET_CNI_PLUGINS_URL} || exit $ERR_CNI_DOWNLOAD_TIMEOUT
+    tar -xzf $AZURE_CNI_TGZ_TMP -C $CNI_BIN_DIR
+    installCNI
+    mv $CNI_BIN_DIR/10-azure.conflist $CNI_CONFIG_DIR/
+    chmod 600 $CNI_CONFIG_DIR/10-azure.conflist
+    /sbin/ebtables -t nat --list
+}
+
 function installContainerd() {
 	CRI_CONTAINERD_VERSION="1.1.0"
 	CONTAINERD_DOWNLOAD_URL="https://storage.googleapis.com/cri-containerd-release/cri-containerd-${CRI_CONTAINERD_VERSION}.linux-amd64.tar.gz"
@@ -158,18 +160,16 @@ function extractHyperkube() {
     rm -rf /tmp/hyperkube.tar "/tmp/img"
 }
 
-function installContainerRuntime() {
-    if [[ "$CONTAINER_RUNTIME" == "docker" ]]; then
-        installDocker
-    elif [[ "$CONTAINER_RUNTIME" == "clear-containers" ]]; then
-	    # Ensure we can nest virtualization
-        if grep -q vmx /proc/cpuinfo; then
-            installClearContainersRuntime
-        fi
-    elif [[ "$CONTAINER_RUNTIME" == "kata-containers" ]]; then
-        # Ensure we can nest virtualization
-        if grep -q vmx /proc/cpuinfo; then
-            installKataContainersRuntime
-        fi
-    fi
+function installFlexVolDrivers() {
+    PLUGIN_DIR=/etc/kubernetes/volumeplugins
+    # install blobfuse flexvolume driver
+    BLOBFUSE_DIR=$PLUGIN_DIR/azure~blobfuse
+    mkdir -p $BLOBFUSE_DIR
+    retrycmd_if_failure_no_stats 20 1 30 curl -fsSL https://acs-mirror.azureedge.net/flexvol/blobfuse-v0.1 > $BLOBFUSE_DIR/blobfuse || exit $ERR_FLEXVOLUME_DOWNLOAD_TIMEOUT
+    chmod a+x $BLOBFUSE_DIR/blobfuse
+    # install smb flexvolume driver
+    SMB_DIR=$PLUGIN_DIR/microsoft.com~smb
+    mkdir -p $SMB_DIR
+    retrycmd_if_failure_no_stats 20 1 30 curl -fsSL https://acs-mirror.azureedge.net/flexvol/smb-v0.1 > $SMB_DIR/smb || exit $ERR_FLEXVOLUME_DOWNLOAD_TIMEOUT
+    chmod a+x $SMB_DIR/smb
 }
